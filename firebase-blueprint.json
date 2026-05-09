@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user account",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["username", "password", "role", "name"]
+    },
+    "Brand": {
+      "title": "Brand",
+      "description": "Equipment brand",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "ServiceRequest": {
+      "title": "Service Request",
+      "description": "Equipment repair service request",
+      "type": "object",
+      "properties": {
+        "customer_name": { "type": "string" },
+        "customer_phone": { "type": "string" },
+        "customer_address": { "type": "string" },
+        "brand_id": { "type": "string" },
+        "model": { "type": "string" },
+        "serial_number": { "type": "string" },
+        "issue_description": { "type": "string" },
+        "accessories": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "technician_id": { "type": "string" },
+        "operator_id": { "type": "string" },
+        "is_warranty": { "type": "boolean" },
+        "rejection_reason": { "type": "string" },
+        "rejected_by_id": { "type": "string" },
+        "service_notes": { "type": "string" },
+        "down_payment": { "type": "number" },
+        "labor_charge": { "type": "number" },
+        "service_type": { "type": "string" },
+        "request_number": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customer_name", "request_number", "created_at"]
+    },
+    "Part": {
+      "title": "Part",
+      "description": "Spare part inventory item",
+      "type": "object",
+      "properties": {
+        "part_number": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "cogs": { "type": "number" }
+      },
+      "required": ["name", "price"]
+    },
+    "ServicePart": {
+      "title": "Service Part",
+      "description": "Part used in a service request",
+      "type": "object",
+      "properties": {
+        "part_id": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price_at_time": { "type": "number" }
+      },
+      "required": ["part_id", "quantity", "price_at_time"]
+    },
+    "Billing": {
+      "title": "Billing",
+      "description": "Invoice and billing details",
+      "type": "object",
+      "properties": {
+        "service_fee": { "type": "number" },
+        "total_amount": { "type": "number" },
+        "status": { "type": "string" },
+        "invoice_number": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["total_amount", "invoice_number", "status"]
+    },
+    "ServiceLog": {
+      "title": "Service Log",
+      "description": "Log entry for a service request",
+      "type": "object",
+      "properties": {
+        "technician_id": { "type": "string" },
+        "note": { "type": "string" },
+        "is_important": { "type": "boolean" },
+        "is_responded": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["note", "created_at"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Application setting",
+      "type": "object",
+      "properties": {
+        "value": { "type": "string" }
+      },
+      "required": ["value"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "System users" },
+    "brands": { "schema": "Brand", "description": "Equipment brands" },
+    "parts": { "schema": "Part", "description": "Inventory parts" },
+    "settings": { "schema": "Setting", "description": "Global application settings" },
+    "service_requests": { "schema": "ServiceRequest", "description": "Main service request collection" },
+    "service_requests/{requestId}/parts": { "schema": "ServicePart", "description": "Parts used in a specific request" },
+    "service_requests/{requestId}/billing": { "schema": "Billing", "description": "Billing for a specific request" },
+    "service_requests/{requestId}/logs": { "schema": "ServiceLog", "description": "History logs for a request" }
+  }
+}

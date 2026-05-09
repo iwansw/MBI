@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return true; } // Relaxed for custom login system
+    function isValidId(id) { return id is string && id.size() <= 128; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // --- Collection Rules ---
+
+    // Users
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Brands
+    match /brands/{brandId} {
+      allow read, write: if true;
+    }
+
+    // Parts
+    match /parts/{partId} {
+      allow read, write: if true;
+    }
+
+    // Settings
+    match /settings/{settingKey} {
+      allow read, write: if true;
+    }
+
+    // Billing
+    match /billing/{billId} {
+      allow read, write: if true;
+    }
+
+    // Service Requests
+    match /service_requests/{requestId} {
+      function isValidRequest(data) {
+        return data.customer_name is string && data.customer_name.size() > 0 &&
+               data.request_number is string &&
+               data.status in ['PENDING', 'ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'WAITING_PARTS', 'IN_PROGRESS', 'COMPLETED', 'PAID', 'CLOSED', 'CANCELLED'];
+      }
+      
+      allow read: if true;
+      allow create, update: if isValidRequest(incoming());
+      allow delete: if true;
+
+      // Subcollections
+      match /parts/{partItemId} {
+        allow read, write: if true;
+      }
+      
+      match /logs/{logId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
