@@ -579,7 +579,60 @@ export default function AdminPanel({ user }: { user: User }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-500/10 rounded-xl">
+                  <Database className="w-6 h-6 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Cloud Migration</h3>
+                  <p className="text-zinc-500 text-xs">Port data from local server to Cloud Firestore</p>
+                </div>
+              </div>
+              
+              <div className="p-6 bg-blue-500/5 rounded-xl space-y-4">
+                <p className="text-xs text-blue-400 font-medium italic">Use this if you see no data after the recent update.</p>
+                <div className="grid grid-cols-1 gap-1">
+                  <p className="text-[10px] text-zinc-500 flex items-center gap-2">
+                    <span className="w-1 h-1 bg-blue-500 rounded-full" /> 
+                    Migrates Users & Passwords
+                  </p>
+                  <p className="text-[10px] text-zinc-500 flex items-center gap-2">
+                    <span className="w-1 h-1 bg-blue-500 rounded-full" /> 
+                    Migrates all Service Requests (SR#)
+                  </p>
+                  <p className="text-[10px] text-zinc-500 flex items-center gap-2">
+                    <span className="w-1 h-1 bg-blue-500 rounded-full" /> 
+                    Migrates Invoices, Parts & Brands
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (!confirm('This will copy all data from the local SQLite database to Firestore. It will not delete anything on the local server. Continue?')) return;
+                  const loadingToast = toast.loading('Initializing migration tunnel...');
+                  try {
+                    const res = await fetch('/api/migrate-from-sqlite', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success('System migration complete! Your data is now in the cloud.', { id: loadingToast });
+                      setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                      throw new Error(data.error || 'Server rejected migration');
+                    }
+                  } catch (err: any) {
+                    toast.error(`Migration Failed: ${err.message}`, { id: loadingToast });
+                  }
+                }}
+                className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 border border-zinc-700 hover:border-blue-500/50"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Migrate Local Data
+              </button>
+            </div>
+
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 space-y-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-zinc-800 rounded-xl">

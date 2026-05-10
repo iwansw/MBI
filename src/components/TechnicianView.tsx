@@ -237,7 +237,7 @@ export default function TechnicianView({ user }: { user: User }) {
                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Model Name</label>
                     <input 
                       type="text"
-                      value={editingJob.model || ''}
+                      value={editingJob.model || (editingJob as any).device_model || ''}
                       onChange={(e) => setEditingJob({...editingJob, model: e.target.value})}
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
@@ -466,7 +466,7 @@ function JobCard({ job, user, isExpanded, onToggle, onStatusUpdate, onUpdateNote
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white">{job.brand_name} {job.model}</h3>
+              <h3 className="font-semibold text-white">{job.brand_name} {job.model || (job as any).device_model}</h3>
               {!!job.is_warranty && (
                 <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-tighter">
                   <ShieldCheck className="w-2.5 h-2.5" />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   FileText, 
   Search, 
@@ -7,7 +7,8 @@ import {
   CheckCircle2, 
   Clock,
   CreditCard,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import Logo from './Logo';
 import { User, ServiceRequest, Billing, ServicePart } from '../types';
@@ -15,8 +16,12 @@ import { cn, formatCurrency, formatDateTime } from '../lib/utils';
 import { toast } from 'sonner';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, where, doc, updateDoc, setDoc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import jsPDF from 'jspdf';
+import { toPng } from 'html-to-image';
 
 export default function BillingView({ user }: { user: User }) {
+  const invoiceRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [requests, setRequests] = useState<(ServiceRequest & { billing_status?: string })[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [bill, setBill] = useState<Billing | null>(null);
@@ -172,10 +177,155 @@ export default function BillingView({ user }: { user: User }) {
     }
   };
 
+  const handlePrint = () => {
+    if (!invoiceRef.current) return;
+    
+    toast.info('Preparing print document...');
+    
+    // Create a hidden iframe for printing to handle styles correctly in iframes
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('title', 'Print Frame');
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      toast.error('Could not create print frame');
+      return;
+    }
+
+    // Get all style tags and link tags to clone the look exactly
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(s => s.outerHTML)
+      .join('');
+
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>MBI - Print Document</title>
+          ${styles}
+          <style>
+            @media print {
+              @page {
+                size: A4;
+                margin: 0;
+              }
+              body {
+                background: white !important;
+                color: black !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+              .print-area {
+                display: block !important;
+                width: 210mm !important; /* A4 Width */
+                min-height: 297mm !important; /* A4 Height */
+                margin: 0 auto !important;
+                padding: 10mm !important;
+                box-shadow: none !important;
+                border: none !important;
+                overflow: visible !important;
+                background: white !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+            /* Ensure it looks okay in the iframe before print */
+            body { background: white; }
+          </style>
+        </head>
+        <body>
+          <div class="print-area">
+            ${invoiceRef.current.innerHTML}
+          </div>
+          <script>
+            // Ensure all images are loaded before printing
+            window.onload = function() {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => {
+                  window.parent.document.body.removeChild(window.frameElement);
+                }, 500);
+              }, 1000);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!invoiceRef.current || !selectedRequest) return;
+    
+    setIsGeneratingPDF(true);
+    const toastId = toast.loading('Generating high-quality PDF...');
+    
+    try {
+      // Small delay to ensure styles are perfectly calculated
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      const dataUrl = await toPng(invoiceRef.current, {
+        quality: 1.0,
+        pixelRatio: 3,
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        style: {
+          borderRadius: '0',
+          boxShadow: 'none',
+          // Force some basic colors to ensure oklch doesn't break fonts or rendering
+          color: '#18181b'
+        }
+      });
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const img = new Image();
+      img.src = dataUrl;
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      const imgWidth = pdfWidth;
+      const imgHeight = (img.height * imgWidth) / img.width;
+      
+      pdf.addImage(dataUrl, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+      
+      const fileName = `${selectedRequest.status === 'APPR-WAIT' ? 'Quote' : 'Invoice'}_${bill?.invoice_number || 'Draft'}_${selectedRequest.customer_name}.pdf`;
+      pdf.save(fileName);
+      
+      toast.success('PDF downloaded successfully', { id: toastId });
+    } catch (err: any) {
+      console.error('PDF Generation error:', err);
+      toast.error(`Failed to generate PDF: ${err.message || 'Unknown error'}. Please use the "Print" button and select "Save as PDF".`, { id: toastId });
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left: Request Selection */}
-      <div className="lg:col-span-1 space-y-6">
+      <div className="lg:col-span-1 space-y-6 no-print">
         <div>
           <h1 className="text-2xl font-bold text-white">Billing & Invoicing</h1>
           <p className="text-zinc-500 text-sm">Generate quotes for approval or invoices for completed units.</p>
@@ -234,7 +384,7 @@ export default function BillingView({ user }: { user: User }) {
       <div className="lg:col-span-2">
         {selectedRequest ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between no-print">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl">
                   <FileText className="w-6 h-6 text-zinc-400" />
@@ -244,7 +394,7 @@ export default function BillingView({ user }: { user: User }) {
                   <p className="text-xs text-zinc-500">{selectedRequest.status === 'APPR-WAIT' ? 'Review estimate before sending to customer.' : 'Review parts and service fees before generating.'}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 no-print">
                 {bill ? (
                   <>
                       {bill.status === 'UNPAID' && selectedRequest.status !== 'APPR-WAIT' && (
@@ -256,13 +406,20 @@ export default function BillingView({ user }: { user: User }) {
                           Mark as Paid
                         </button>
                       )}
-                    <button className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:border-zinc-700 transition-all">
+                    <button 
+                      onClick={handlePrint}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:text-white hover:border-zinc-700 transition-all"
+                    >
                       <Printer className="w-4 h-4" />
                       Print
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-blue-600/20">
-                      <Download className="w-4 h-4" />
-                      Download PDF
+                    <button 
+                      onClick={handleDownloadPDF}
+                      disabled={isGeneratingPDF}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
                     </button>
                   </>
                 ) : (
@@ -277,7 +434,7 @@ export default function BillingView({ user }: { user: User }) {
               </div>
             </div>
 
-            <div className="bg-white text-zinc-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div ref={invoiceRef} className="bg-white text-zinc-900 rounded-2xl shadow-2xl overflow-hidden print-area">
               {/* Invoice Header */}
               <div className="p-10 bg-zinc-50 border-b border-zinc-200 flex justify-between items-start">
                 <div>

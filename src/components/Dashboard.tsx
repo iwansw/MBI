@@ -304,7 +304,7 @@ export default function Dashboard({ user }: { user: User }) {
                 )} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white truncate">{req.customer_name}</p>
-                  <p className="text-xs text-zinc-500 truncate">{req.brand_name} {req.device_model}</p>
+                  <p className="text-xs text-zinc-500 truncate">{req.brand_name} {req.model || (req as any).device_model}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-medium text-zinc-400">{req.status}</p>

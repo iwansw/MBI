@@ -39,3 +39,30 @@
     @apply bg-zinc-900/50 backdrop-blur-xl border border-zinc-800;
   }
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    overflow: visible !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    z-index: 9999 !important;
+  }
+  /* Ensure all containers allow content to flow for printing */
+  html, body, #root, .flex, main, div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}

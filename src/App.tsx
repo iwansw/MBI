@@ -52,7 +52,7 @@ function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
   const filteredItems = menuItems.filter(item => item.roles.includes(user.role));
 
   return (
-    <div className="w-64 bg-zinc-900 text-zinc-400 h-screen flex flex-col border-r border-zinc-800">
+    <div className="w-64 bg-zinc-900 text-zinc-400 h-screen flex flex-col border-r border-zinc-800 no-print">
       <div className="p-6 flex items-center gap-3">
         <Logo className="w-8 h-8" />
         <span className="text-white font-semibold text-lg tracking-tight">MBI Service</span>
@@ -288,12 +288,33 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
             </button>
           </form>
 
-          <div className="mt-12 p-6 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Demo Accounts</h3>
-            <div className="grid grid-cols-1 gap-2">
-              <div className="text-[11px] text-zinc-500 flex justify-between"><span>Admin</span> <code className="text-zinc-300">admin / admin123</code></div>
-              <div className="text-[11px] text-zinc-500 flex justify-between"><span>Operator</span> <code className="text-zinc-300">op1 / op123</code></div>
-              <div className="text-[11px] text-zinc-500 flex justify-between"><span>Technician</span> <code className="text-zinc-300">tech1 / tech123</code></div>
+          <div className="mt-12 p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800/50 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Enterprise Portal</h3>
+                <p className="text-[10px] text-zinc-500 mt-1">Authorized Personnel Only</p>
+              </div>
+              <div className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+                 <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter">Secure</span>
+                 </div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-700/50">
+                  <Lock className="w-4 h-4 text-zinc-500" />
+                </div>
+                <p className="text-[11px] text-zinc-400 font-medium leading-tight">MFA authentication supported for enhanced session security.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-700/50">
+                  <Users className="w-4 h-4 text-zinc-500" />
+                </div>
+                <p className="text-[11px] text-zinc-400 font-medium leading-tight">Role-based access control for technical and management teams.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -436,7 +457,7 @@ function AppInner() {
       <Sidebar user={user} onLogout={handleLogout} />
       
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-8 bg-zinc-950/50 backdrop-blur-xl sticky top-0 z-10">
+        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-8 bg-zinc-950/50 backdrop-blur-xl sticky top-0 z-10 no-print">
           <div className="flex items-center gap-4">
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />

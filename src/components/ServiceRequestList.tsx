@@ -418,7 +418,7 @@ export default function ServiceRequestList({ user }: { user: User }) {
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-zinc-300">{req.brand_name} {req.model}</span>
+                        <span className="text-sm font-medium text-zinc-300">{req.brand_name} {req.model || (req as any).device_model}</span>
                         {!!req.is_warranty && (
                           <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-tighter">
                             <ShieldCheck className="w-2.5 h-2.5" />
@@ -652,7 +652,7 @@ export default function ServiceRequestList({ user }: { user: User }) {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Device</p>
-                    <p className="text-lg font-semibold text-white">{viewingRequest.brand_name} {viewingRequest.model}</p>
+                    <p className="text-lg font-semibold text-white">{viewingRequest.brand_name} {viewingRequest.model || (viewingRequest as any).device_model}</p>
                     <p className="text-sm font-mono text-zinc-400">{viewingRequest.serial_number}</p>
                   </div>
                 </div>

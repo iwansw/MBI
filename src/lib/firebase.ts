@@ -1,24 +1,47 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import * as firestore from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
+// Initialize Firebase App
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); 
+
+console.log('Firebase App initialized:', app.name);
+console.log('Firestore DB ID from config:', firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore
+// Using namespaced import to help registration in some environments
+let firestoreDb;
+try {
+  const dbId = firebaseConfig.firestoreDatabaseId;
+  if (dbId && dbId !== "" && dbId !== "(default)") {
+    firestoreDb = firestore.getFirestore(app, dbId);
+    console.log('Firestore initialized with named database:', dbId);
+  } else {
+    firestoreDb = firestore.getFirestore(app);
+    console.log('Firestore initialized with default database');
+  }
+} catch (error) {
+  console.error('Firestore initialization error:', error);
+  // Fallback
+  firestoreDb = firestore.getFirestore(app);
+}
+
+export const db = firestoreDb;
 export const auth = getAuth(app);
 
+export { firestore }; // Export firestore namespace for utility usage if needed
+
 // Validation check
-async function testConnection() {
+export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await firestore.getDocFromServer(firestore.doc(db, 'test', 'connection'));
     console.log("Firebase connection established successfully");
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration or network.");
-    }
+  } catch (error: any) {
+    if (error.code === 'permission-denied') return;
+    console.error("Firebase connection test error:", error.message || error);
   }
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',

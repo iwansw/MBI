@@ -9,9 +9,16 @@ const __dirname = path.dirname(__filename);
 
 import { initializeApp as initializeAdminApp, cert } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from './firebase-applet-config.json';
-
 import fs from "fs";
+const firebaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'firebase-applet-config.json'), 'utf8'));
+
+// Initialize Firebase Admin
+initializeAdminApp({
+  projectId: firebaseConfig.projectId,
+});
+const adminDb = firebaseConfig.firestoreDatabaseId 
+  ? getAdminFirestore(undefined, firebaseConfig.firestoreDatabaseId)
+  : getAdminFirestore(); 
 
 const db = new Database("mbi_service.db");
 
@@ -183,8 +190,114 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API Routes - Removed as app now uses Firebase Firestore directly from the client
-  // Static serving and Vite remain
+  // API Routes - Migration helper to move data from SQLite to Firebase
+  app.post("/api/migrate-from-sqlite", async (req, res) => {
+    try {
+      console.log("Starting migration from SQLite to Firebase...");
+      
+      // 1. Users - Preserve username as doc ID
+      const sqliteUsers = db.prepare("SELECT * FROM users").all() as any[];
+      for (const u of sqliteUsers) {
+        await adminDb.collection("users").doc(u.username).set({
+          username: u.username,
+          password: u.password,
+          role: u.role,
+          name: u.name,
+          migrated_at: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      // 2. Brands
+      const sqliteBrands = db.prepare("SELECT * FROM brands").all() as any[];
+      const brandMap = new Map();
+      for (const b of sqliteBrands) {
+        const brandRef = await adminDb.collection("brands").add({
+          name: b.name,
+          migrated_at: new Date().toISOString()
+        });
+        brandMap.set(b.id, brandRef.id);
+      }
+
+      // 3. Settings
+      const sqliteSettings = db.prepare("SELECT * FROM settings").all() as any[];
+      for (const s of sqliteSettings) {
+        await adminDb.collection("settings").doc(s.key).set({
+          value: s.value,
+          migrated_at: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      // 4. Parts
+      const sqliteParts = db.prepare("SELECT * FROM parts").all() as any[];
+      for (const p of sqliteParts) {
+        await adminDb.collection("parts").add({
+          part_number: p.part_number,
+          name: p.name,
+          price: p.price,
+          cogs: p.cogs,
+          migrated_at: new Date().toISOString()
+        });
+      }
+
+      // 5. Service Requests
+      const sqliteRequests = db.prepare("SELECT * FROM service_requests").all() as any[];
+      for (const r of sqliteRequests) {
+        const requestData = {
+          customer_name: r.customer_name,
+          customer_phone: r.customer_phone,
+          customer_address: r.customer_address,
+          brand_id: brandMap.get(r.brand_id) || r.brand_id,
+          model: r.model,
+          serial_number: r.serial_number,
+          issue_description: r.issue_description,
+          accessories: r.accessories,
+          status: r.status,
+          priority: r.priority,
+          service_notes: r.service_notes,
+          labor_charge: r.labor_charge,
+          down_payment: r.down_payment,
+          service_type: r.service_type,
+          request_number: r.request_number,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          migrated_at: new Date().toISOString()
+        };
+        const reqDoc = await adminDb.collection("service_requests").add(requestData);
+
+        // 6. Billing for this request
+        const sqliteBilling = db.prepare("SELECT * FROM billing WHERE service_request_id = ?").get(r.id) as any;
+        if (sqliteBilling) {
+          await adminDb.collection("billing").add({
+            service_request_id: reqDoc.id,
+            service_fee: sqliteBilling.service_fee,
+            total_amount: sqliteBilling.total_amount,
+            status: sqliteBilling.status,
+            invoice_number: sqliteBilling.invoice_number,
+            created_at: sqliteBilling.created_at,
+            migrated_at: new Date().toISOString()
+          });
+        }
+
+        // 7. Service Logs for this request
+        const sqliteLogs = db.prepare("SELECT l.*, u.username FROM service_log l LEFT JOIN users u ON l.technician_id = u.id WHERE service_request_id = ?").all(r.id) as any[];
+        for (const log of sqliteLogs) {
+          await adminDb.collection(`service_requests/${reqDoc.id}/logs`).add({
+            note: log.note,
+            technician_username: log.username,
+            is_important: log.is_important === 1,
+            is_responded: log.is_responded === 1,
+            created_at: log.created_at,
+            migrated_at: new Date().toISOString()
+          });
+        }
+      }
+
+      res.json({ success: true, message: "Migration completed successfully" });
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
