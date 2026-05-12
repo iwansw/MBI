@@ -30,6 +30,7 @@ import AdminPanel from './components/AdminPanel';
 import BillingView from './components/BillingView';
 import SettingsView from './components/SettingsView';
 import ChangePassword from './components/ChangePassword';
+import ProfileView from './components/ProfileView';
 import { cn } from './lib/utils';
 import Logo from './components/Logo';
 import { db, OperationType, handleFirestoreError, auth } from './lib/firebase';
@@ -46,7 +47,7 @@ function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
     { icon: CreditCard, label: 'Billing', path: '/billing', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR'] },
     { icon: Users, label: 'User Management', path: '/users', roles: ['ADMIN'] },
     { icon: Settings, label: 'Settings', path: '/settings', roles: ['ADMIN', 'POWER_USER'] },
-    { icon: Lock, label: 'Change Password', path: '/change-password', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR', 'TECHNICIAN'] },
+    { icon: UserIcon, label: 'My Profile', path: '/profile', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR', 'TECHNICIAN'] },
   ];
 
   const filteredItems = menuItems.filter(item => item.roles.includes(user.role));
@@ -77,15 +78,19 @@ function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
       </nav>
 
       <div className="p-4 border-t border-zinc-800">
-        <div className="flex items-center gap-3 px-3 py-2 mb-4">
-          <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-            <UserIcon className="w-4 h-4 text-zinc-400" />
+        <Link to="/profile" className="flex items-center gap-3 px-3 py-2 mb-4 hover:bg-zinc-800/50 rounded-xl transition-all group">
+          <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center border border-zinc-700 overflow-hidden ring-blue-500/20 group-hover:ring-4 transition-all">
+            {user.avatar_url ? (
+              <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              <UserIcon className="w-4 h-4 text-zinc-400" />
+            )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user.name}</p>
-            <p className="text-xs text-zinc-500 truncate">{user.role}</p>
+            <p className="text-sm font-bold text-white truncate">{user.name}</p>
+            <p className="text-[10px] text-zinc-500 truncate font-black uppercase tracking-widest mt-1 leading-none">{user.role}</p>
           </div>
-        </div>
+        </Link>
         <button 
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
@@ -477,15 +482,19 @@ function AppInner() {
               <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full border-2 border-zinc-950"></span>
             </button>
             <div className="h-8 w-px bg-zinc-800 mx-2"></div>
-            <div className="flex items-center gap-3">
+            <Link to="/profile" className="flex items-center gap-3 hover:bg-zinc-800/30 p-1 rounded-full pr-3 transition-all group">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-white">{user.name}</p>
-                <p className="text-xs text-zinc-500">{user.role}</p>
+                <p className="text-sm font-bold text-white">{user.name}</p>
+                <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest leading-none">{user.role}</p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg">
-                {user.name.charAt(0)}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg overflow-hidden border-2 border-zinc-800 group-hover:border-blue-500/50 transition-all">
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+                ) : (
+                  user.name.charAt(0)
+                )}
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 
@@ -498,6 +507,10 @@ function AppInner() {
             <Route path="/billing" element={<BillingView user={user} />} />
             <Route path="/users" element={<AdminPanel user={user} />} />
             <Route path="/settings" element={<SettingsView user={user} />} />
+            <Route path="/profile" element={<ProfileView user={user} onUpdateUser={(u) => {
+              setUser(u);
+              localStorage.setItem('mbi_user', JSON.stringify(u));
+            }} />} />
             <Route path="/change-password" element={<ChangePassword user={user} />} />
           </Routes>
         </div>

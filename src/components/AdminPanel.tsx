@@ -360,8 +360,12 @@ export default function AdminPanel({ user }: { user: User }) {
                 <div key={u.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-all group">
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-white font-bold text-lg border border-zinc-700">
-                        {u.name.charAt(0)}
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-white font-bold text-lg border border-zinc-700 overflow-hidden ring-blue-500/10 group-hover:ring-4 transition-all">
+                        {u.avatar_url ? (
+                          <img src={u.avatar_url} alt={u.name} className="w-full h-full object-cover" />
+                        ) : (
+                          u.name.charAt(0)
+                        )}
                       </div>
                       <div>
                         <h3 className="font-bold text-white group-hover:text-blue-400 transition-colors">{u.name}</h3>
@@ -427,11 +431,15 @@ export default function AdminPanel({ user }: { user: User }) {
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
                   {currentItems.map((u) => (
-                    <tr key={u.id} className="hover:bg-zinc-800/30 transition-all group">
+                    <tr key={u.id} className="hover:bg-zinc-800/30 transition-all group cursor-pointer" onClick={() => startEditing(u)}>
                       <td className="px-8 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold group-hover:bg-blue-600/10 group-hover:text-blue-500 transition-all border border-zinc-700">
-                            {u.name.charAt(0)}
+                          <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-400 font-bold group-hover:bg-blue-600/10 group-hover:text-blue-500 transition-all border border-zinc-700 overflow-hidden">
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt={u.name} className="w-full h-full object-cover" />
+                            ) : (
+                              u.name.charAt(0)
+                            )}
                           </div>
                           <div>
                             <span className="block font-bold text-white group-hover:text-blue-400 transition-colors">{u.name}</span>

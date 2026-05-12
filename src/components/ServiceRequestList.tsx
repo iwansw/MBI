@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Filter, 
@@ -21,6 +21,7 @@ import {
   Hash,
   MapPin,
   PlusCircle,
+  Plus,
   ShieldAlert,
   Clock
 } from 'lucide-react';
@@ -33,6 +34,7 @@ import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, deleteDo
 
 export default function ServiceRequestList({ user }: { user: User }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [technicians, setTechnicians] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,6 +331,15 @@ export default function ServiceRequestList({ user }: { user: User }) {
           <p className="text-zinc-500 text-sm">Manage and track all customer service units.</p>
         </div>
         <div className="flex items-center gap-3">
+          {['ADMIN', 'OPERATOR'].includes(user.role) && (
+            <button 
+              onClick={() => navigate('/new-request')}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Request</span>
+            </button>
+          )}
           <button 
             onClick={() => {
               setLoading(true);
@@ -377,10 +388,14 @@ export default function ServiceRequestList({ user }: { user: User }) {
                   </tr>
                 ))
               ) : currentRequests.map((req) => (
-                <tr key={req.id} className={cn(
-                  "hover:bg-zinc-800/30 transition-colors group",
-                  req.rejection_reason && req.status === 'PENDING' && "bg-rose-500/[0.08] border-l-2 border-l-rose-500"
-                )}>
+                <tr 
+                  key={req.id} 
+                  onClick={() => setViewingRequest(req)}
+                  className={cn(
+                    "hover:bg-zinc-800/30 transition-colors group cursor-pointer",
+                    req.rejection_reason && req.status === 'PENDING' && "bg-rose-500/[0.08] border-l-2 border-l-rose-500"
+                  )}
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-1.5">
                       <div className="relative inline-flex items-center gap-2">
@@ -456,7 +471,7 @@ export default function ServiceRequestList({ user }: { user: User }) {
                             {req.technician_name}
                           </div>
                         ) : (
-                          <div className="relative">
+                          <div className="relative" onClick={(e) => e.stopPropagation()}>
                             {assigningId === req.id ? (
                               <select 
                                 autoFocus
@@ -513,13 +528,7 @@ export default function ServiceRequestList({ user }: { user: User }) {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => setViewingRequest(req)}
-                        className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                       <button 
                         onClick={() => setEditingRequest(req)}
                         disabled={req.billing_status === 'PAID'}

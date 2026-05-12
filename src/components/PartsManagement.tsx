@@ -326,7 +326,7 @@ export default function PartsManagement() {
                           </span>
                         )}
                       </div>
-                      <p className="font-semibold text-white group-hover:text-blue-400 transition-colors">
+                      <p className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
                         {part.name}
                       </p>
                     </div>

@@ -5,6 +5,7 @@ export interface User {
   username: string;
   role: UserRole;
   name: string;
+  avatar_url?: string;
 }
 
 export interface Brand {

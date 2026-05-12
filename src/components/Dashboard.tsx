@@ -83,6 +83,13 @@ export default function Dashboard({ user }: { user: User }) {
     };
   }, []);
 
+  const filteredRequests = useMemo(() => {
+    if (user.role === 'TECHNICIAN') {
+      return requests.filter(r => r.technician_id === user.id);
+    }
+    return requests;
+  }, [requests, user]);
+
   const stats = useMemo<Stats>(() => {
     const billMap = new Map<string, any>();
     bills.forEach(b => {
@@ -91,13 +98,13 @@ export default function Dashboard({ user }: { user: User }) {
     });
 
     const stats: Stats = {
-      total: requests.length,
-      inProgress: requests.filter(r => ['PENDING', 'ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'WAITING_PARTS', 'IN_PROGRESS'].includes(r.status)).length,
-      completed: requests.filter(r => r.status === 'COMPLETED').length,
-      paid: requests.filter(r => r.status === 'PAID').length,
-      closed: requests.filter(r => r.status === 'CLOSED').length,
-      cancelled: requests.filter(r => r.status === 'CANCELLED').length,
-      revenue: requests.reduce((acc, r) => {
+      total: filteredRequests.length,
+      inProgress: filteredRequests.filter(r => ['PENDING', 'ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'WAITING_PARTS', 'IN_PROGRESS'].includes(r.status)).length,
+      completed: filteredRequests.filter(r => r.status === 'COMPLETED').length,
+      paid: filteredRequests.filter(r => r.status === 'PAID').length,
+      closed: filteredRequests.filter(r => r.status === 'CLOSED').length,
+      cancelled: filteredRequests.filter(r => r.status === 'CANCELLED').length,
+      revenue: filteredRequests.reduce((acc, r) => {
         const bill = billMap.get(r.id);
         const isSettled = r.status === 'PAID' || r.status === 'CLOSED';
         const isBillPaid = bill?.status === 'PAID';
@@ -124,11 +131,11 @@ export default function Dashboard({ user }: { user: User }) {
       }, 0),
       brandStats: brands.map(b => ({
         name: b.name,
-        count: requests.filter(r => r.brand_id === b.id).length
+        count: filteredRequests.filter(r => r.brand_id === b.id).length
       }))
     };
     return stats;
-  }, [requests, brands, bills]);
+  }, [filteredRequests, brands, bills]);
 
   const recentRequests = useMemo(() => {
     const getDate = (date: any) => {
@@ -138,7 +145,7 @@ export default function Dashboard({ user }: { user: User }) {
       return isNaN(d.getTime()) ? 0 : d.getTime();
     };
 
-    return [...requests]
+    return [...filteredRequests]
       .sort((a, b) => {
         const timeA = Math.max(getDate(a.updated_at), getDate(a.created_at));
         const timeB = Math.max(getDate(b.updated_at), getDate(b.created_at));
@@ -152,7 +159,7 @@ export default function Dashboard({ user }: { user: User }) {
           brand_name: brand?.name || 'Unknown Brand'
         };
       });
-  }, [requests, brands]);
+  }, [filteredRequests, brands]);
 
   if (loading) return <div className="animate-pulse space-y-8">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
