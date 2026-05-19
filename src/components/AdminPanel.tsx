@@ -223,7 +223,7 @@ export default function AdminPanel({ user }: { user: User }) {
       }
 
       console.log('PHASE 2: Clearing top-level collections...');
-      const collectionsToClear = ['billing'];
+      const collectionsToClear = ['billing', 'billings'];
       
       for (const collName of collectionsToClear) {
         toast.loading(`Clearing ${collName}...`, { id: resetLoadingToast });
@@ -664,9 +664,26 @@ export default function AdminPanel({ user }: { user: User }) {
                     All Invoices & Quotes
                   </li>
                 </ul>
-                <div className="text-[10px] text-emerald-500 font-medium flex items-center gap-2">
-                  <div className="w-1 h-1 rounded-full bg-emerald-500" />
-                  Brands & Parts Inventory will be retained
+                <div className="pt-4 border-t border-zinc-800 space-y-2">
+                  <p className="text-xs text-zinc-500 italic">Retained Data:</p>
+                  <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    <li className="flex items-center gap-2 text-[10px] text-emerald-500 font-medium">
+                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                      User Management
+                    </li>
+                    <li className="flex items-center gap-2 text-[10px] text-emerald-500 font-medium">
+                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                      Brands & Parts
+                    </li>
+                    <li className="flex items-center gap-2 text-[10px] text-emerald-500 font-medium">
+                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                      General Settings
+                    </li>
+                    <li className="flex items-center gap-2 text-[10px] text-emerald-500 font-medium">
+                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                      Security PIN
+                    </li>
+                  </ul>
                 </div>
               </div>
 

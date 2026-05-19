@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   CreditCard,
+  BarChart3,
   Lock,
   Eye,
   EyeOff
@@ -31,12 +32,13 @@ import BillingView from './components/BillingView';
 import SettingsView from './components/SettingsView';
 import ChangePassword from './components/ChangePassword';
 import ProfileView from './components/ProfileView';
+import PerformanceView from './components/PerformanceView';
 import { cn } from './lib/utils';
 import Logo from './components/Logo';
 import { db, OperationType, handleFirestoreError, auth } from './lib/firebase';
 import { collection, onSnapshot, getDocs, query, where, limit, doc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 
-function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Sidebar({ user, onLogout, isCollapsed }: { user: User; onLogout: () => void, isCollapsed: boolean }) {
   const location = useLocation();
   
   const menuItems = [
@@ -45,6 +47,7 @@ function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
     { icon: PlusCircle, label: 'New Request', path: '/new-request', roles: ['ADMIN', 'OPERATOR'] },
     { icon: Wrench, label: 'My Jobs', path: '/my-jobs', roles: ['ADMIN', 'TECHNICIAN'] },
     { icon: CreditCard, label: 'Billing', path: '/billing', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR'] },
+    { icon: BarChart3, label: 'Performance', path: '/performance', roles: ['ADMIN'] },
     { icon: Users, label: 'User Management', path: '/users', roles: ['ADMIN'] },
     { icon: Settings, label: 'Settings', path: '/settings', roles: ['ADMIN', 'POWER_USER'] },
     { icon: UserIcon, label: 'My Profile', path: '/profile', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR', 'TECHNICIAN'] },
@@ -53,50 +56,104 @@ function Sidebar({ user, onLogout }: { user: User; onLogout: () => void }) {
   const filteredItems = menuItems.filter(item => item.roles.includes(user.role));
 
   return (
-    <div className="w-64 bg-zinc-900 text-zinc-400 h-screen flex flex-col border-r border-zinc-800 no-print">
-      <div className="p-6 flex items-center gap-3">
-        <Logo className="w-8 h-8" />
-        <span className="text-white font-semibold text-lg tracking-tight">MBI Service</span>
+    <div className={cn(
+      "bg-zinc-900 text-zinc-400 h-screen flex flex-col border-r border-zinc-800 no-print transition-all duration-300 ease-in-out",
+      isCollapsed ? "w-20" : "w-64"
+    )}>
+      <div className={cn(
+        "p-6 flex items-center gap-3 overflow-hidden",
+        isCollapsed && "justify-center px-0"
+      )}>
+        <Logo className="w-8 h-8 shrink-0" />
+        {!isCollapsed && (
+          <motion.span 
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="text-white font-semibold text-lg tracking-tight whitespace-nowrap"
+          >
+            MBI Service
+          </motion.span>
+        )}
       </div>
       
-      <nav className="flex-1 px-4 py-4 space-y-1">
+      <nav className={cn("flex-1 px-4 py-4 space-y-1", isCollapsed && "px-2")}>
         {filteredItems.map((item) => (
           <Link
             key={item.path}
             to={item.path}
+            title={isCollapsed ? item.label : undefined}
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group",
+              "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group relative",
               location.pathname === item.path 
                 ? "bg-zinc-800 text-white" 
-                : "hover:bg-zinc-800/50 hover:text-zinc-200"
+                : "hover:bg-zinc-800/50 hover:text-zinc-200",
+              isCollapsed && "justify-center px-0"
             )}
           >
-            <item.icon className={cn("w-5 h-5", location.pathname === item.path ? "text-blue-500" : "group-hover:text-zinc-200")} />
-            <span className="text-sm font-medium">{item.label}</span>
+            <item.icon className={cn("w-5 h-5 shrink-0", location.pathname === item.path ? "text-blue-500" : "group-hover:text-zinc-200")} />
+            {!isCollapsed && (
+              <motion.span 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="text-sm font-medium whitespace-nowrap"
+              >
+                {item.label}
+              </motion.span>
+            )}
+            {isCollapsed && (
+              <div className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl border border-zinc-700">
+                {item.label}
+              </div>
+            )}
           </Link>
         ))}
       </nav>
 
-      <div className="p-4 border-t border-zinc-800">
-        <Link to="/profile" className="flex items-center gap-3 px-3 py-2 mb-4 hover:bg-zinc-800/50 rounded-xl transition-all group">
-          <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center border border-zinc-700 overflow-hidden ring-blue-500/20 group-hover:ring-4 transition-all">
+      <div className={cn("p-4 border-t border-zinc-800", isCollapsed && "px-2")}>
+        <Link 
+          to="/profile" 
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 mb-4 hover:bg-zinc-800/50 rounded-xl transition-all group relative",
+            isCollapsed && "justify-center px-0 mb-6"
+          )}
+          title={isCollapsed ? "My Profile" : undefined}
+        >
+          <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center border border-zinc-700 overflow-hidden ring-blue-500/20 group-hover:ring-4 transition-all shrink-0">
             {user.avatar_url ? (
               <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
             ) : (
               <UserIcon className="w-4 h-4 text-zinc-400" />
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white truncate">{user.name}</p>
-            <p className="text-[10px] text-zinc-500 truncate font-black uppercase tracking-widest mt-1 leading-none">{user.role}</p>
-          </div>
+          {!isCollapsed && (
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex-1 min-w-0"
+            >
+              <p className="text-sm font-bold text-white truncate">{user.name}</p>
+              <p className="text-[10px] text-zinc-500 truncate font-black uppercase tracking-widest mt-1 leading-none">{user.role}</p>
+            </motion.div>
+          )}
         </Link>
         <button 
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors group relative",
+            isCollapsed && "justify-center px-0"
+          )}
+          title={isCollapsed ? "Logout" : undefined}
         >
-          <LogOut className="w-5 h-5" />
-          <span className="text-sm font-medium">Logout</span>
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!isCollapsed && (
+            <motion.span 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-sm font-medium whitespace-nowrap"
+            >
+              Logout
+            </motion.span>
+          )}
         </button>
       </div>
     </div>
@@ -424,6 +481,8 @@ function AnnouncementBar() {
 
 function AppInner() {
   const [user, setUser] = useState<User | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -431,7 +490,21 @@ function AppInner() {
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
+    
+    // Read sidebar state from local storage
+    const savedSidebarState = localStorage.getItem('mbi_sidebar_collapsed');
+    if (savedSidebarState) {
+      setIsSidebarCollapsed(savedSidebarState === 'true');
+    }
   }, []);
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const newState = !prev;
+      localStorage.setItem('mbi_sidebar_collapsed', newState.toString());
+      return newState;
+    });
+  };
 
   const handleLogin = (u: User) => {
     setUser(u);
@@ -459,18 +532,39 @@ function AppInner() {
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-200 overflow-hidden">
-      <Sidebar user={user} onLogout={handleLogout} />
+      <Sidebar user={user} onLogout={handleLogout} isCollapsed={isSidebarCollapsed} />
       
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-8 bg-zinc-950/50 backdrop-blur-xl sticky top-0 z-10 no-print">
-          <div className="flex items-center gap-4">
-            <div className="relative w-72">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={toggleSidebar}
+              className="p-2 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white group"
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              <Menu className={cn("w-5 h-5 transition-transform duration-300", isSidebarCollapsed && "rotate-180")} />
+            </button>
+            <div className="relative w-72 hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input 
                 type="text" 
                 placeholder="Search requests..." 
-                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                value={globalSearch}
+                onChange={(e) => {
+                  setGlobalSearch(e.target.value);
+                  // If not on search-capable page, maybe navigate?
+                  // For now, assume user navigates manually or we just show results if they are on a list
+                }}
+                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-full pl-10 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
               />
+              {globalSearch && (
+                <button 
+                  onClick={() => setGlobalSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -501,10 +595,11 @@ function AppInner() {
         <div className="flex-1 overflow-y-auto p-8">
           <Routes>
             <Route path="/" element={<Dashboard user={user} />} />
-            <Route path="/requests" element={<ServiceRequestList user={user} />} />
+            <Route path="/requests" element={<ServiceRequestList user={user} globalSearch={globalSearch} />} />
             <Route path="/new-request" element={<ServiceRequestForm user={user} />} />
-            <Route path="/my-jobs" element={<TechnicianView user={user} />} />
-            <Route path="/billing" element={<BillingView user={user} />} />
+            <Route path="/my-jobs" element={<TechnicianView user={user} globalSearch={globalSearch} />} />
+            <Route path="/billing" element={<BillingView user={user} globalSearch={globalSearch} />} />
+            <Route path="/performance" element={<PerformanceView user={user} />} />
             <Route path="/users" element={<AdminPanel user={user} />} />
             <Route path="/settings" element={<SettingsView user={user} />} />
             <Route path="/profile" element={<ProfileView user={user} onUpdateUser={(u) => {

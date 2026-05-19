@@ -188,6 +188,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="+12%" 
           trendUp={true}
           color="blue"
+          onClick={() => navigate('/requests')}
         />
         <StatCard 
           title="In-Progress" 
@@ -196,6 +197,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="+5" 
           trendUp={false}
           color="amber"
+          onClick={() => navigate('/requests', { state: { statusFilter: 'IN_PROGRESS_ALL' } })}
         />
         <StatCard 
           title="Completed" 
@@ -204,6 +206,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="+8%" 
           trendUp={true}
           color="emerald"
+          onClick={() => navigate('/requests', { state: { statusFilter: 'COMPLETED' } })}
         />
         <StatCard 
           title="Paid Units" 
@@ -212,6 +215,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="+3" 
           trendUp={true}
           color="cyan"
+          onClick={() => navigate('/requests', { state: { statusFilter: 'PAID' } })}
         />
         <StatCard 
           title="Closed" 
@@ -220,6 +224,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="0" 
           trendUp={true}
           color="zinc"
+          onClick={() => navigate('/requests', { state: { statusFilter: 'CLOSED' } })}
         />
         <StatCard 
           title="Cancelled" 
@@ -228,6 +233,7 @@ export default function Dashboard({ user }: { user: User }) {
           trend="-2" 
           trendUp={false}
           color="rose"
+          onClick={() => navigate('/requests', { state: { statusFilter: 'CANCELLED' } })}
         />
         {user.role === 'ADMIN' && (
           <StatCard 
@@ -338,7 +344,7 @@ export default function Dashboard({ user }: { user: User }) {
   );
 }
 
-function StatCard({ title, value, icon: Icon, trend, trendUp, color }: any) {
+function StatCard({ title, value, icon: Icon, trend, trendUp, color, onClick }: any) {
   const colors: any = {
     blue: "text-blue-500 bg-blue-500/10",
     amber: "text-amber-500 bg-amber-500/10",
@@ -350,9 +356,15 @@ function StatCard({ title, value, icon: Icon, trend, trendUp, color }: any) {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors group">
+    <div 
+      onClick={onClick}
+      className={cn(
+        "bg-zinc-900 border border-zinc-800 rounded-2xl p-6 transition-all group",
+        onClick ? "cursor-pointer hover:border-blue-500/50 hover:bg-zinc-800/50 active:scale-[0.98]" : "hover:border-zinc-700"
+      )}
+    >
       <div className="flex items-center justify-between mb-4">
-        <div className={cn("p-2 rounded-xl", colors[color])}>
+        <div className={cn("p-2 rounded-xl transition-transform group-hover:scale-110 duration-300", colors[color])}>
           <Icon className="w-6 h-6" />
         </div>
         <div className={cn(

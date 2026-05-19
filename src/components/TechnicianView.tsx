@@ -23,13 +23,52 @@ import { toast } from 'sonner';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, deleteDoc, addDoc, getDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 
-export default function TechnicianView({ user }: { user: User }) {
+export default function TechnicianView({ user, globalSearch }: { user: User, globalSearch?: string }) {
   const [jobs, setJobs] = useState<ServiceRequest[]>([]);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingJob, setEditingJob] = useState<ServiceRequest | null>(null);
+
+  const filteredJobs = useMemo(() => {
+    let result = jobs;
+    if (globalSearch) {
+      const term = globalSearch.toLowerCase();
+      result = jobs.filter(job => 
+        job.customer_name.toLowerCase().includes(term) ||
+        job.customer_phone.toLowerCase().includes(term) ||
+        job.serial_number.toLowerCase().includes(term) ||
+        job.model.toLowerCase().includes(term) ||
+        job.request_number.toLowerCase().includes(term)
+      );
+    }
+
+    const STATUS_PRIORITY: Record<string, number> = {
+      'ASSIGNED': 1,
+      'INSPECTION': 2,
+      'IN_PROGRESS': 3,
+      'APPR-WAIT': 4,
+      'WAITING_PARTS': 5,
+      'COMPLETED': 6,
+      'PAID': 7,
+      'CLOSED': 8,
+    };
+
+    return [...result].sort((a, b) => {
+      const priorityA = STATUS_PRIORITY[a.status] || 999;
+      const priorityB = STATUS_PRIORITY[b.status] || 999;
+      
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      // Secondary sort by date created (newest first)
+      const dateA = a.created_at?.seconds || 0;
+      const dateB = b.created_at?.seconds || 0;
+      return dateB - dateA;
+    });
+  }, [jobs, globalSearch]);
 
   useEffect(() => {
     const q = query(collection(db, 'service_requests'), orderBy('created_at', 'desc'));
@@ -191,13 +230,18 @@ export default function TechnicianView({ user }: { user: User }) {
       <div className="space-y-4">
         {loading ? (
           [1,2,3].map(i => <div key={i} className="h-24 bg-zinc-900 rounded-2xl animate-pulse"></div>)
-        ) : jobs.length === 0 ? (
+        ) : filteredJobs.length === 0 ? (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
             <Wrench className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-            <h3 className="text-white font-semibold">No active jobs</h3>
-            <p className="text-zinc-500 text-sm mt-1">You don't have any service units assigned to you at the moment.</p>
+            <h3 className="text-white font-semibold">{globalSearch ? 'No matching jobs' : 'No active jobs'}</h3>
+            <p className="text-zinc-500 text-sm mt-1">
+              {globalSearch 
+                ? `No results found for "${globalSearch}"`
+                : "You don't have any service units assigned to you at the moment."
+              }
+            </p>
           </div>
-        ) : jobs.map((job) => (
+        ) : filteredJobs.map((job) => (
           <JobCard 
             key={job.id} 
             job={job} 
@@ -654,7 +698,7 @@ function JobCard({ job, user, isExpanded, onToggle, onStatusUpdate, onUpdateNote
               <div>
                 <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Update Status</h4>
                 <div className="flex flex-wrap gap-2">
-                  {['ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'CANCELLED']
+                  {['ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'WAITING_PARTS', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
                     .filter(s => {
                       if (user.role === 'TECHNICIAN') {
                         return s !== 'ASSIGNED' && s !== 'CANCELLED';

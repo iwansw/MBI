@@ -253,8 +253,16 @@ export default function PartsManagement() {
               placeholder="Search parts..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-10 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
             />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-white transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <button 
             onClick={handleDownloadTemplate}

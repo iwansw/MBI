@@ -32,13 +32,14 @@ import { toast } from 'sonner';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, where, doc, updateDoc, deleteDoc, addDoc, getDocs, limit, serverTimestamp } from 'firebase/firestore';
 
-export default function ServiceRequestList({ user }: { user: User }) {
+export default function ServiceRequestList({ user, globalSearch }: { user: User, globalSearch?: string }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [technicians, setTechnicians] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [viewingRequest, setViewingRequest] = useState<ServiceRequest | null>(null);
   const [viewingRequestLogs, setViewingRequestLogs] = useState<ServiceLog[]>([]);
@@ -90,14 +91,18 @@ export default function ServiceRequestList({ user }: { user: User }) {
   }, []);
 
   useEffect(() => {
-    if (requests.length > 0 && location.state?.requestId) {
-      const request = requests.find(r => r.id === location.state.requestId);
-      if (request) {
-        setViewingRequest(request);
-        // Clear state to avoid reopening on refresh if desired, 
-        // though usually keeping it for the session is fine.
-        window.history.replaceState({}, document.title);
+    if (requests.length > 0) {
+      if (location.state?.requestId) {
+        const request = requests.find(r => r.id === location.state.requestId);
+        if (request) {
+          setViewingRequest(request);
+        }
       }
+      if (location.state?.statusFilter) {
+        setStatusFilter(location.state.statusFilter);
+      }
+      // Clear state to avoid persistent filters/views on subsequent internal navigations
+      window.history.replaceState({}, document.title);
     }
   }, [requests, location.state]);
 
@@ -288,16 +293,29 @@ export default function ServiceRequestList({ user }: { user: User }) {
     }
   };
 
-  const filteredRequests = requests.filter(req => 
-    req.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    req.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    req.model.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const searchTerm = globalSearch || localSearch;
+
+  const filteredRequests = requests.filter(req => {
+    const matchesSearch = 
+      req.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.customer_phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.request_number.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = !statusFilter || (
+      statusFilter === 'IN_PROGRESS_ALL' 
+        ? ['PENDING', 'ASSIGNED', 'INSPECTION', 'APPR-WAIT', 'WAITING_PARTS', 'IN_PROGRESS'].includes(req.status)
+        : req.status === statusFilter
+    );
+
+    return matchesSearch && matchesStatus;
+  });
 
   // Pagination logic
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, statusFilter]);
 
   const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -328,7 +346,17 @@ export default function ServiceRequestList({ user }: { user: User }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Service Requests</h1>
-          <p className="text-zinc-500 text-sm">Manage and track all customer service units.</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-zinc-500 text-sm">Manage and track all customer service units.</p>
+            {statusFilter && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-500 uppercase">
+                Filter: {statusFilter === 'IN_PROGRESS_ALL' ? 'In Progress' : statusFilter}
+                <button onClick={() => setStatusFilter(null)} className="hover:text-blue-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {['ADMIN', 'OPERATOR'].includes(user.role) && (
@@ -356,10 +384,18 @@ export default function ServiceRequestList({ user }: { user: User }) {
             <input 
               type="text" 
               placeholder="Search requests..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64 text-white"
             />
+            {localSearch && (
+              <button 
+                onClick={() => setLocalSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-white transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <button className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors">
             <Filter className="w-5 h-5" />
