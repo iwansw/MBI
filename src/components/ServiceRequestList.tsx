@@ -23,7 +23,9 @@ import {
   PlusCircle,
   Plus,
   ShieldAlert,
-  Clock
+  Clock,
+  Printer,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, ServiceRequest, Brand, ServiceLog } from '../types';
@@ -49,6 +51,188 @@ export default function ServiceRequestList({ user, globalSearch }: { user: User,
   const [isAddingLog, setIsAddingLog] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [settings, setSettings] = useState<Record<string, any>>({});
+
+  const handlePrintReceipt = () => {
+    if (!viewingRequest) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const partsHtml = viewingRequestParts.length > 0 
+      ? `
+        <div style="margin-top: 20px;">
+          <h3 style="font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;">Parts Replaced</h3>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+              <tr style="border-bottom: 2px solid #000;">
+                <th style="padding: 8px 0; text-align: left;">Description</th>
+                <th style="padding: 8px 0; text-align: center;">Qty</th>
+                <th style="padding: 8px 0; text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${viewingRequestParts.map(p => `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 8px 0;">
+                    <div style="font-weight: bold;">${p.name}</div>
+                    <div style="font-size: 9px; color: #64748b;">${p.part_number}</div>
+                  </td>
+                  <td style="padding: 8px 0; text-align: center;">${p.quantity}</td>
+                  <td style="padding: 8px 0; text-align: right; font-weight: bold;">${formatCurrency((p.current_price ?? p.price_at_time) * p.quantity)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '';
+
+    const totalPartsCost = viewingRequestParts.reduce((acc, p) => acc + ((p.current_price ?? p.price_at_time) * p.quantity), 0);
+    const balanceDue = viewingRequest.is_warranty === 1 ? 0 : (viewingRequest.labor_charge || 0) + totalPartsCost - (viewingRequest.down_payment || 0);
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${viewingRequest.request_number}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono&display=swap');
+            @page {
+              size: A4;
+              margin: 0;
+            }
+            body { 
+              font-family: 'Inter', sans-serif; 
+              color: #000; 
+              margin: 0; 
+              padding: 15mm;
+              -webkit-print-color-adjust: exact;
+              width: 210mm;
+              box-sizing: border-box;
+            }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+            .logo-header { height: 45px; margin-bottom: 10px; display: block; }
+            .company-info h1 { margin: 0; font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; }
+            .company-info p { margin: 1px 0; font-size: 10px; color: #475569; }
+            .sr-info { text-align: right; }
+            .sr-info h2 { margin: 0; font-size: 22px; font-weight: 900; color: #f1f5f9; text-transform: uppercase; line-height: 0.9; margin-bottom: 10px; }
+            .sr-info p { margin: 2px 0; font-size: 11px; font-weight: bold; }
+            .grid { display: grid; grid-template-cols: 1fr 1fr; gap: 30px; margin: 20px 0; }
+            .section-title { font-size: 9px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+            .info-block p { margin: 1px 0; font-size: 12px; }
+            .info-block .main { font-weight: bold; font-size: 14px; }
+            .details-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin: 15px 0; }
+            .details-box { background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 10px; font-style: italic; color: #475569; border: 1px solid #f1f5f9; min-height: 40px; }
+            .totals { margin-top: 25px; border-top: 1.5px solid #000; padding-top: 12px; width: 220px; margin-left: auto; }
+            .total-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; }
+            .total-row.grand { font-size: 15px; font-weight: 900; color: #2563eb; margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+            .terms { margin-top: 30px; font-size: 9px; color: #64748b; line-height: 1.3; }
+            .terms ul { padding-left: 15px; margin: 4px 0; }
+            .signatures { margin-top: 40px; display: grid; grid-template-cols: 1fr 1fr; gap: 80px; }
+            .sig-box { border-top: 1px solid #000; padding-top: 8px; text-align: center; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-info">
+              <img src="/logo.png" class="logo-header" onerror="this.src='https://placehold.co/200x80/3b82f6/ffffff?text=MBI+SERVICE'" />
+              <h1>${settings.company_name || 'MBI Service Center'}</h1>
+              <p>${settings.company_address || '123 Tech Avenue, Silicon Valley'}</p>
+              <p>${settings.company_email || 'support@mbiservice.com'}</p>
+              <p>${settings.company_phone || '+1 (555) 123-4567'}</p>
+            </div>
+            <div class="sr-info">
+              <h2>Service Receipt</h2>
+              <p>SR#: <span style="color: #2563eb;">${viewingRequest.request_number}</span></p>
+              <p>Date: ${formatDateTime(new Date())}</p>
+              <p>Status: <span style="text-transform: uppercase;">${viewingRequest.status}</span></p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="info-block">
+              <div class="section-title">Customer Details</div>
+              <p class="main">${viewingRequest.customer_name}</p>
+              <p>${viewingRequest.customer_phone}</p>
+              <p style="font-size: 10px; color: #64748b; margin-top: 4px;">${viewingRequest.customer_address || ''}</p>
+            </div>
+            <div class="info-block">
+              <div class="section-title">Unit Information</div>
+              <p class="main">${viewingRequest.brand_name} ${viewingRequest.model || ''}</p>
+              <p style="font-family: 'JetBrains Mono'; font-size: 11px;">S/N: ${viewingRequest.serial_number}</p>
+              <p style="font-size: 9px; font-weight: bold; color: ${viewingRequest.is_warranty ? '#10b981' : '#64748b'}; margin-top: 4px;">
+                ${viewingRequest.is_warranty ? '● WARRANTY UNIT' : '● NON-WARRANTY UNIT'}
+              </p>
+            </div>
+          </div>
+
+          <div class="details-grid">
+            <div>
+              <div class="section-title">Issue Description</div>
+              <div class="details-box">
+                "${viewingRequest.issue_description}"
+              </div>
+            </div>
+            <div>
+              <div class="section-title">Accessories Included</div>
+              <div class="details-box">
+                "${viewingRequest.accessories || 'No accessories listed'}"
+              </div>
+            </div>
+          </div>
+
+          ${partsHtml}
+
+          <div class="totals">
+            <div class="total-row">
+              <span>Labor Charge</span>
+              <span>${formatCurrency(viewingRequest.labor_charge || 0)}</span>
+            </div>
+            ${totalPartsCost > 0 ? `
+              <div class="total-row">
+                <span>Parts Total</span>
+                <span>${formatCurrency(totalPartsCost)}</span>
+              </div>
+            ` : ''}
+            ${viewingRequest.down_payment > 0 ? `
+              <div class="total-row" style="color: #10b981;">
+                <span>Down Payment</span>
+                <span>-${formatCurrency(viewingRequest.down_payment)}</span>
+              </div>
+            ` : ''}
+            <div class="total-row grand">
+              <span>Balance Due</span>
+              <span>${formatCurrency(balanceDue)}</span>
+            </div>
+          </div>
+
+          <div class="terms">
+            <div class="section-title">Terms & Conditions</div>
+            <ul>
+              <li>Cancellation fee: 50% of labor charge applies to cancelled service requests.</li>
+              <li>Non-warranty: Customer approval required before parts replacement.</li>
+              <li>Warranty: 14-day service warranty on labor only, from pickup date.</li>
+              <li>Pickup: Units must be collected within 14 days of completion notification.</li>
+              <li>Abandoned: Units uncollected >60 days are scrapped; MBI holds no liability.</li>
+            </ul>
+          </div>
+
+          <div class="signatures">
+            <div class="sig-box">Operator: ${user.name}</div>
+            <div class="sig-box">Customer: ${viewingRequest.customer_name}</div>
+          </div>
+
+          <div style="margin-top: 30px; text-align: center; font-size: 8px; color: #94a3b8; font-family: 'JetBrains Mono'; letter-spacing: 0.05em;">
+            AUTH/${viewingRequest.request_number}/${Date.now().toString(36).toUpperCase()}
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 500);
+  };
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -83,10 +267,19 @@ export default function ServiceRequestList({ user, globalSearch }: { user: User,
       setBrands(data);
     });
 
+    const unsubscribeSettings = onSnapshot(collection(db, 'settings'), (snapshot) => {
+      const data: Record<string, any> = {};
+      snapshot.docs.forEach(doc => {
+        data[doc.id] = doc.data().value;
+      });
+      setSettings(data);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeUsers();
       unsubscribeBrands();
+      unsubscribeSettings();
     };
   }, []);
 
@@ -667,7 +860,39 @@ export default function ServiceRequestList({ user, globalSearch }: { user: User,
               className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
             >
               <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-white">Request Details</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-bold text-white">Request Details</h2>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={handlePrintReceipt}
+                      disabled={!((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1)}
+                      title={!((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1) ? "Enter labor charge to enable receipt" : "Print Receipt"}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        !((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1)
+                          ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20"
+                      )}
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Print Receipt
+                    </button>
+                    <button 
+                      onClick={handlePrintReceipt}
+                      disabled={!((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1)}
+                      title={!((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1) ? "Enter labor charge to enable receipt" : "Download PDF Receipt"}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        !((viewingRequest?.labor_charge || 0) > 0 || viewingRequest?.is_warranty === 1)
+                          ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                          : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                      )}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download
+                    </button>
+                  </div>
+                </div>
                 <button onClick={() => setViewingRequest(null)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
                   <X className="w-5 h-5 text-zinc-500" />
                 </button>
