@@ -14,7 +14,10 @@ import {
   Trash2,
   Save,
   Search,
-  Edit3
+  Edit3,
+  ArrowLeft,
+  ChevronRight,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, ServiceRequest, Part, ServicePart, ServiceLog, Brand } from '../types';
@@ -30,6 +33,10 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingJob, setEditingJob] = useState<ServiceRequest | null>(null);
+
+  const [technicians, setTechnicians] = useState<User[]>([]);
+  const [selectedTechnician, setSelectedTechnician] = useState<User | null>(null);
+  const [viewingUnassigned, setViewingUnassigned] = useState(false);
 
   const filteredJobs = useMemo(() => {
     let result = jobs;
@@ -70,6 +77,52 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
     });
   }, [jobs, globalSearch]);
 
+  const jobsToDisplay = useMemo(() => {
+    if (user.role !== 'ADMIN') {
+      return filteredJobs;
+    }
+    if (viewingUnassigned) {
+      return filteredJobs.filter(job => !job.technician_id);
+    }
+    if (selectedTechnician) {
+      return filteredJobs.filter(job => job.technician_id === selectedTechnician.id);
+    }
+    return [];
+  }, [filteredJobs, user.role, selectedTechnician, viewingUnassigned]);
+
+  const technicianStats = useMemo(() => {
+    return technicians.map(tech => {
+      const techJobs = jobs.filter(j => j.technician_id === tech.id);
+      const activeJobs = techJobs.filter(j => ['ASSIGNED', 'INSPECTION', 'IN_PROGRESS', 'APPR-WAIT', 'WAITING_PARTS'].includes(j.status));
+      const completedJobs = techJobs.filter(j => ['COMPLETED', 'PAID', 'CLOSED'].includes(j.status));
+      const urgentJobs = techJobs.filter(j => j.priority === 'URGENT' || (j.has_urgent_pending && j.has_urgent_pending > 0));
+
+      return {
+        ...tech,
+        totalJobs: techJobs.length,
+        activeCount: activeJobs.length,
+        completedCount: completedJobs.length,
+        urgentCount: urgentJobs.length
+      };
+    });
+  }, [technicians, jobs]);
+
+  const unassignedCount = useMemo(() => {
+    return jobs.filter(j => !j.technician_id).length;
+  }, [jobs]);
+
+  const visibleTechnicians = useMemo(() => {
+    if (!globalSearch) return technicianStats;
+    const term = globalSearch.toLowerCase();
+    return technicianStats.filter(tech => {
+      if (tech.name.toLowerCase().includes(term) || tech.username.toLowerCase().includes(term)) {
+        return true;
+      }
+      const techJobs = filteredJobs.filter(j => j.technician_id === tech.id);
+      return techJobs.length > 0;
+    });
+  }, [technicianStats, globalSearch, filteredJobs]);
+
   useEffect(() => {
     const q = query(collection(db, 'service_requests'), orderBy('created_at', 'desc'));
     const unsubscribeJobs = onSnapshot(q, (snapshot) => {
@@ -78,11 +131,12 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
         ...doc.data()
       } as ServiceRequest));
       
-      const myJobs = data.filter(job => 
-        job.technician_id === user.id || 
-        (user.role === 'ADMIN' && job.status === 'PENDING')
-      );
-      setJobs(myJobs);
+      if (user.role === 'ADMIN') {
+        setJobs(data);
+      } else {
+        const myJobs = data.filter(job => job.technician_id === user.id);
+        setJobs(myJobs);
+      }
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'service_requests');
@@ -106,18 +160,34 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
       setBrands(data);
     });
 
+    let unsubscribeUsers = () => {};
+    if (user.role === 'ADMIN') {
+      unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as User));
+        const techs = data.filter(u => u.role === 'TECHNICIAN');
+        setTechnicians(techs);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      });
+    }
+
     return () => {
       unsubscribeJobs();
       unsubscribeParts();
       unsubscribeBrands();
+      unsubscribeUsers();
     };
   }, [user.id, user.role]);
 
   const updateStatus = async (jobId: string, status: string, unassign: boolean = false, reason: string = '') => {
     try {
+      const currentTechId = unassign ? null : (selectedTechnician ? selectedTechnician.id : (user.role === 'ADMIN' ? null : user.id));
       await updateDoc(doc(db, 'service_requests', jobId), { 
         status, 
-        technician_id: unassign ? null : user.id,
+        technician_id: currentTechId,
         rejection_reason: reason || null,
         operator_id: user.id,
         updated_at: serverTimestamp()
@@ -222,42 +292,187 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">My Service Jobs</h1>
-        <p className="text-zinc-500 text-sm">Manage your assigned units and track parts replacement.</p>
-      </div>
-
-      <div className="space-y-4">
-        {loading ? (
-          [1,2,3].map(i => <div key={i} className="h-24 bg-zinc-900 rounded-2xl animate-pulse"></div>)
-        ) : filteredJobs.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
-            <Wrench className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-            <h3 className="text-white font-semibold">{globalSearch ? 'No matching jobs' : 'No active jobs'}</h3>
-            <p className="text-zinc-500 text-sm mt-1">
-              {globalSearch 
-                ? `No results found for "${globalSearch}"`
-                : "You don't have any service units assigned to you at the moment."
-              }
-            </p>
+      {/* HEADER SECTION */}
+      {user.role === 'ADMIN' && (selectedTechnician || viewingUnassigned) ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => {
+                setSelectedTechnician(null);
+                setViewingUnassigned(false);
+                setExpandedJob(null);
+              }}
+              className="p-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white rounded-xl transition-all"
+              title="Back to Technicians"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] whitespace-nowrap font-black uppercase bg-blue-600/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20">
+                  ADMIN CONSOLE
+                </span>
+                <span className="text-xs text-zinc-500">Viewing assigned queue</span>
+              </div>
+              <h1 className="text-2xl font-bold text-white mt-1">
+                {viewingUnassigned ? 'Unassigned Requests' : `${selectedTechnician?.name}'s Jobs`}
+              </h1>
+            </div>
           </div>
-        ) : filteredJobs.map((job) => (
-          <JobCard 
-            key={job.id} 
-            job={job} 
-            user={user}
-            isExpanded={expandedJob === job.id}
-            onToggle={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
-            onStatusUpdate={(status: any, unassign: any, reason: any) => updateStatus(job.id, status, unassign, reason)}
-            onUpdateNotes={(notes: any) => updateNotes(job.id, notes)}
-            parts={parts}
-            onAddPart={(partId: any, quantity: any) => addPartToJob(job.id, partId, quantity)}
-            onRemovePart={removePartFromJob}
-            brands={brands}
-            onEdit={() => setEditingJob(job)}
-          />
-        ))}
-      </div>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-2 flex items-center gap-3 w-fit">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-sm font-semibold text-zinc-300">
+              {jobsToDisplay.length} Jobs Found
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <h1 className="text-2xl font-bold text-white">
+            {user.role === 'ADMIN' ? 'Assigned Jobs' : 'My Service Jobs'}
+          </h1>
+          <p className="text-zinc-500 text-sm">
+            {user.role === 'ADMIN' 
+              ? 'Monitor and access job queues for all active technicians.' 
+              : 'Manage your assigned units and track parts replacement.'}
+          </p>
+        </div>
+      )}
+
+      {/* BODY CONTENT */}
+      {user.role === 'ADMIN' && !selectedTechnician && !viewingUnassigned ? (
+        /* ADMIN MAIN DASHBOARD (TECHNICIAN CARDS LIST) */
+        loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1,2,3].map(i => <div key={i} className="h-44 bg-zinc-900 rounded-2xl animate-pulse"></div>)}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {unassignedCount > 0 && (
+              <div 
+                onClick={() => setViewingUnassigned(true)}
+                className="bg-amber-500/10 border border-amber-500/25 hover:border-amber-500/40 rounded-2xl p-5 flex items-center justify-between cursor-pointer group transition-all"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-lg">Unassigned & Pending Requests</h3>
+                    <p className="text-zinc-400 text-sm">Requests waiting for a technician assignment.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="bg-amber-600/30 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-sm border border-amber-500/30">
+                    {unassignedCount} jobs
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {visibleTechnicians.map(tech => (
+                <div 
+                  key={tech.id}
+                  onClick={() => {
+                    setSelectedTechnician(tech);
+                    setViewingUnassigned(false);
+                  }}
+                  className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/80 rounded-2xl p-6 cursor-pointer group transition-all flex flex-col justify-between h-48 relative overflow-hidden"
+                >
+                  {tech.urgentCount > 0 && (
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl pointer-events-none" />
+                  )}
+
+                  <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-800/80 border border-zinc-700/50 flex justify-center items-center text-zinc-300 group-hover:text-blue-400 transition-colors">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-white font-bold group-hover:text-blue-400 transition-colors leading-tight">{tech.name}</h3>
+                          <p className="text-zinc-500 text-xs">@{tech.username}</p>
+                        </div>
+                      </div>
+                      <span className="bg-zinc-950 font-mono text-[11px] font-bold text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-800">
+                        Total: {tech.totalJobs}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                      <div className="bg-zinc-950/40 p-2 rounded-xl text-center border border-zinc-800/50">
+                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-wider">Active</p>
+                        <p className="text-white font-black text-sm mt-0.5">{tech.activeCount}</p>
+                      </div>
+                      <div className="bg-zinc-950/40 p-2 rounded-xl text-center border border-zinc-800/50">
+                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-wider">Done</p>
+                        <p className="text-emerald-500 font-black text-sm mt-0.5">{tech.completedCount}</p>
+                      </div>
+                      <div className="bg-zinc-950/40 p-2 rounded-xl text-center border border-zinc-800/50">
+                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-wider">Urgent</p>
+                        <p className={cn(
+                          "font-black text-sm mt-0.5",
+                          tech.urgentCount > 0 ? "text-rose-500 animate-pulse" : "text-zinc-600"
+                        )}>{tech.urgentCount}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800/40 text-xs text-zinc-500">
+                    <span className="group-hover:text-zinc-300 transition-colors">View assigned queue</span>
+                    <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                  </div>
+                </div>
+              ))}
+              
+              {visibleTechnicians.length === 0 && (
+                <div className="col-span-full bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
+                  <Users className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+                  <h3 className="text-white font-semibold">No Technicians Found</h3>
+                  <p className="text-zinc-500 text-sm mt-1">No technicians match search criteria or exist in system.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      ) : (
+        /* STANDARD JOBS LIST VIEW FOR STANDARD TECHNICIAN OR EXPANDED ADMIN DRILLDOWN */
+        <div className="space-y-4">
+          {loading ? (
+            [1,2,3].map(i => <div key={i} className="h-24 bg-zinc-900 rounded-2xl animate-pulse"></div>)
+          ) : jobsToDisplay.length === 0 ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
+              <Wrench className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+              <h3 className="text-white font-semibold">{globalSearch ? 'No matching jobs' : 'No active jobs'}</h3>
+              <p className="text-zinc-500 text-sm mt-1">
+                {globalSearch 
+                  ? `No results found for "${globalSearch}"`
+                  : viewingUnassigned 
+                    ? "Fantastic! There are no unassigned service requests pending."
+                    : "No service units assigned to this technician at the moment."
+                }
+              </p>
+            </div>
+          ) : jobsToDisplay.map((job) => (
+            <JobCard 
+              key={job.id} 
+              job={job} 
+              user={user}
+              isExpanded={expandedJob === job.id}
+              onToggle={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
+              onStatusUpdate={(status: any, unassign: any, reason: any) => updateStatus(job.id, status, unassign, reason)}
+              onUpdateNotes={(notes: any) => updateNotes(job.id, notes)}
+              parts={parts}
+              onAddPart={(partId: any, quantity: any) => addPartToJob(job.id, partId, quantity)}
+              onRemovePart={removePartFromJob}
+              brands={brands}
+              onEdit={() => setEditingJob(job)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Technician Edit Modal */}
       <AnimatePresence>

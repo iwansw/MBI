@@ -45,7 +45,7 @@ function Sidebar({ user, onLogout, isCollapsed }: { user: User; onLogout: () => 
     { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR', 'TECHNICIAN'] },
     { icon: ClipboardList, label: 'All Requests', path: '/requests', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR'] },
     { icon: PlusCircle, label: 'New Request', path: '/new-request', roles: ['ADMIN', 'OPERATOR'] },
-    { icon: Wrench, label: 'My Jobs', path: '/my-jobs', roles: ['ADMIN', 'TECHNICIAN'] },
+    { icon: Wrench, label: user.role === 'ADMIN' ? 'Assigned Jobs' : 'My Jobs', path: '/my-jobs', roles: ['ADMIN', 'TECHNICIAN'] },
     { icon: CreditCard, label: 'Billing', path: '/billing', roles: ['ADMIN', 'POWER_USER', 'MANAGER', 'OPERATOR'] },
     { icon: BarChart3, label: 'Performance', path: '/performance', roles: ['ADMIN'] },
     { icon: Users, label: 'User Management', path: '/users', roles: ['ADMIN'] },
