@@ -9,7 +9,8 @@ import {
   CreditCard,
   ExternalLink,
   Loader2,
-  X
+  X,
+  XCircle
 } from 'lucide-react';
 import Logo from './Logo';
 import { User, ServiceRequest, Billing, ServicePart } from '../types';
@@ -61,6 +62,7 @@ export default function BillingView({ user, globalSearch }: { user: User, global
         r.status === 'APPR-WAIT' ||
         r.status === 'PAID' ||
         r.status === 'CLOSED' ||
+        r.status === 'CANCELLED' ||
         (r as any).billing_status === 'PAID'
       );
       setRequests(filtered);
@@ -182,6 +184,78 @@ export default function BillingView({ user, globalSearch }: { user: User, global
       const uiResult = { ...result, created_at: new Date().toISOString() };
       setBill({ id: selectedRequest.id, ...uiResult } as any);
       toast.success(`${isQuote ? 'Quote' : 'Invoice'} generated successfully`);
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.CREATE, `billing/${selectedRequest.id}`);
+    }
+  };
+
+  const cancelAndGenerateInvoice = async () => {
+    if (!selectedRequest) return;
+
+    try {
+      const result = await runTransaction(db, async (transaction) => {
+        // Increment invoice counter for cancellation invoice
+        const counterDocRef = doc(db, 'settings', 'invoice_counter');
+        const counterDoc = await transaction.get(counterDocRef);
+        
+        let newCount = 5001;
+        const defaultStart = 5000;
+
+        if (counterDoc.exists()) {
+          newCount = (counterDoc.data().value || defaultStart) + 1;
+        }
+        transaction.set(counterDocRef, { value: newCount }, { merge: true });
+        
+        const invoiceNumber = `INV-${newCount}`;
+        const serviceFee = (selectedRequest.labor_charge || 0) * 0.5; // Only charge labor with 50% deduction
+        const totalAmount = selectedRequest.is_warranty === 1 ? 0 : serviceFee;
+        
+        const billData = {
+          service_request_id: selectedRequest.id,
+          service_fee: serviceFee,
+          total_amount: totalAmount,
+          status: 'UNPAID',
+          invoice_number: invoiceNumber,
+          type: 'INVOICE',
+          created_at: serverTimestamp()
+        };
+        
+        const billRef = doc(db, 'billing', selectedRequest.id);
+        transaction.set(billRef, billData);
+        
+        // Update service request status and billing status 
+        transaction.update(doc(db, 'service_requests', selectedRequest.id), {
+          status: 'CANCELLED',
+          billing_status: 'UNPAID',
+          updated_at: serverTimestamp()
+        });
+
+        // Add progress log
+        const logRef = doc(collection(db, `service_requests/${selectedRequest.id}/logs`));
+        transaction.set(logRef, {
+          note: `Request cancelled by operator. Invoice generated: ${invoiceNumber} charging 50% labor fee (cancellation fee).`,
+          status: 'CANCELLED',
+          operator_id: user.id || 'system',
+          operator_name: user.name || 'System',
+          is_important: 1,
+          created_at: serverTimestamp()
+        });
+
+        return { invoiceNumber, ...billData };
+      });
+
+      // Update state for UI
+      const uiResult = { ...result, created_at: new Date().toISOString() };
+      setBill({ id: selectedRequest.id, ...uiResult } as any);
+      
+      // Update selectedRequest offline state so status becomes CANCELLED instantly in UI
+      setSelectedRequest({
+        ...selectedRequest,
+        status: 'CANCELLED',
+        billing_status: 'UNPAID'
+      });
+      
+      toast.success(`Request cancelled & 50% labor charge invoice generated successfully`);
     } catch (err: any) {
       handleFirestoreError(err, OperationType.CREATE, `billing/${selectedRequest.id}`);
     }
@@ -359,6 +433,20 @@ export default function BillingView({ user, globalSearch }: { user: User, global
     }
   };
 
+  const partsTotal = parts.reduce((acc, p) => acc + ((p.current_price ?? p.price_at_time) * p.quantity), 0);
+  const isCancelled = selectedRequest?.status === 'CANCELLED';
+  const laborCharge = selectedRequest?.labor_charge || 0;
+  
+  const subtotal = partsTotal + laborCharge;
+  const cancellationDeduction = isCancelled ? laborCharge * 0.5 : 0;
+  const waivedPartsDeduction = isCancelled ? partsTotal : 0;
+  
+  const billTotal = isCancelled 
+    ? (selectedRequest?.is_warranty === 1 ? 0 : laborCharge * 0.5)
+    : (selectedRequest?.is_warranty === 1 ? 0 : subtotal);
+    
+  const balanceDue = billTotal - (selectedRequest?.down_payment || 0);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left: Request Selection */}
@@ -468,11 +556,28 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                   <FileText className="w-6 h-6 text-zinc-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-white">{selectedRequest.status === 'APPR-WAIT' ? 'Quote Preview' : 'Invoice Preview'}</h2>
-                  <p className="text-xs text-zinc-500">{selectedRequest.status === 'APPR-WAIT' ? 'Review estimate before sending to customer.' : 'Review parts and service fees before generating.'}</p>
+                  <h2 className="text-lg font-bold text-white">
+                    {isCancelled ? 'Cancellation Invoice Preview' : selectedRequest.status === 'APPR-WAIT' ? 'Quote Preview' : 'Invoice Preview'}
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    {isCancelled 
+                      ? 'Review the generated labor-only cancellation invoice.' 
+                      : selectedRequest.status === 'APPR-WAIT' 
+                        ? 'Review estimate before sending to customer.' 
+                        : 'Review parts and service fees before generating.'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 no-print">
+                {selectedRequest.status === 'APPR-WAIT' && (
+                  <button 
+                    onClick={cancelAndGenerateInvoice}
+                    className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-rose-600/20"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancel Request
+                  </button>
+                )}
                 {bill ? (
                   <>
                       {bill.status === 'UNPAID' && selectedRequest.status !== 'APPR-WAIT' && (
@@ -496,7 +601,7 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                       disabled={isGeneratingPDF}
                       className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-white" />}
                       {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
                     </button>
                   </>
@@ -513,6 +618,12 @@ export default function BillingView({ user, globalSearch }: { user: User, global
             </div>
 
             <div ref={invoiceRef} className="bg-white text-zinc-900 rounded-2xl shadow-2xl overflow-hidden print-area flex flex-col h-full min-h-[1000px] max-h-[1100px]">
+              {isCancelled && (
+                <div className="bg-rose-50 border-b border-rose-100 px-8 py-3 flex items-center gap-2.5 text-rose-700 text-xs font-bold uppercase tracking-wider">
+                  <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>Cancelled Service Request — 50% Labor Cancellation Fee Applied</span>
+                </div>
+              )}
               {/* Invoice Header */}
               <div className="p-8 bg-zinc-50 border-b border-zinc-200 flex justify-between items-start">
                 <div>
@@ -527,11 +638,17 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                   </div>
                 </div>
                 <div className="text-right">
-                  <h1 className="text-2xl font-black text-zinc-300 uppercase mb-3 leading-none">{selectedRequest.status === 'APPR-WAIT' ? 'Service Quote' : 'Invoice'}</h1>
+                  <h1 className="text-2xl font-black text-zinc-300 uppercase mb-3 leading-none">
+                    {isCancelled ? 'Cancellation Invoice' : selectedRequest.status === 'APPR-WAIT' ? 'Service Quote' : 'Invoice'}
+                  </h1>
                   <div className="space-y-0.5">
                     <p className="text-[11px] font-bold">Ref #: <span className="text-zinc-500 font-normal">{bill?.invoice_number || 'DRAFT'}</span></p>
                     <p className="text-[11px] font-bold">Date: <span className="text-zinc-500 font-normal">{formatDateTime(new Date())}</span></p>
-                    <p className="text-[11px] font-bold">Status: <span className={cn("font-bold", bill?.status === 'PAID' ? "text-emerald-600" : "text-amber-600")}>{bill?.status || 'PENDING'}</span></p>
+                    <p className="text-[11px] font-bold">
+                      Status: <span className={cn("font-bold", bill?.status === 'PAID' ? "text-emerald-600" : isCancelled ? "text-rose-600" : "text-amber-600")}>
+                        {bill?.status || (isCancelled ? 'UNPAID' : 'PENDING')}
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -585,24 +702,47 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                   <tbody className="divide-y divide-zinc-100">
                     <tr className="group">
                       <td className="py-3">
-                        <p className="text-xs font-bold uppercase tracking-tight">Labor Charge</p>
-                        <p className="text-[10px] text-zinc-400">Manual labor and service charge</p>
+                        <p className="text-xs font-bold uppercase tracking-tight">
+                          Labor Charge {isCancelled && '(Cancellation Fee Applied)'}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">
+                          {isCancelled ? 'Labor charge with 50% cancellation fee deduction' : 'Manual labor and service charge'}
+                        </p>
                       </td>
                       <td className="py-3 text-center text-xs">1</td>
-                      <td className="py-3 text-right text-xs">{formatCurrency(selectedRequest.labor_charge)}</td>
-                      <td className="py-3 text-right text-xs font-bold">{formatCurrency(selectedRequest.labor_charge)}</td>
+                      <td className="py-3 text-right text-xs">
+                        {isCancelled ? (
+                          <span className="text-zinc-500 line-through mr-1.5">{formatCurrency(selectedRequest.labor_charge)}</span>
+                        ) : null}
+                        <span>{formatCurrency(isCancelled ? selectedRequest.labor_charge * 0.5 : selectedRequest.labor_charge)}</span>
+                      </td>
+                      <td className="py-3 text-right text-xs font-bold">
+                        {formatCurrency(isCancelled ? selectedRequest.labor_charge * 0.5 : selectedRequest.labor_charge)}
+                      </td>
                     </tr>
-                    {parts.map((p) => (
-                      <tr key={p.id}>
-                        <td className="py-3">
-                          <p className="text-xs font-bold uppercase tracking-tight">{p.name}</p>
-                          <p className="text-[10px] text-zinc-400">Replacement Part</p>
-                        </td>
-                        <td className="py-3 text-center text-xs">{p.quantity}</td>
-                        <td className="py-3 text-right text-xs">{formatCurrency(p.current_price ?? p.price_at_time)}</td>
-                        <td className="py-3 text-right text-xs font-bold">{formatCurrency((p.current_price ?? p.price_at_time) * p.quantity)}</td>
-                      </tr>
-                    ))}
+                    {parts.map((p) => {
+                      const partPrice = p.current_price ?? p.price_at_time;
+                      const partTotal = partPrice * p.quantity;
+                      return (
+                        <tr key={p.id}>
+                          <td className="py-3">
+                            <p className={cn("text-xs font-bold uppercase tracking-tight", isCancelled && "line-through text-zinc-400")}>{p.name}</p>
+                            <p className="text-[10px] text-zinc-400">
+                              {isCancelled ? 'Waived Replacement Part (Cancelled)' : 'Replacement Part'}
+                            </p>
+                          </td>
+                          <td className={cn("py-3 text-center text-xs", isCancelled && "text-zinc-400")}>{p.quantity}</td>
+                          <td className={cn("py-3 text-right text-xs", isCancelled && "text-zinc-400")}>{formatCurrency(partPrice)}</td>
+                          <td className="py-3 text-right text-xs font-bold">
+                            {isCancelled ? (
+                              <span className="text-zinc-400 line-through font-normal">{formatCurrency(partTotal)}</span>
+                            ) : (
+                              formatCurrency(partTotal)
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
  
@@ -610,12 +750,26 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                   <div className="w-56 space-y-2">
                     <div className="flex justify-between text-[11px]">
                       <span className="text-zinc-500">Subtotal</span>
-                      <span className="font-bold">{formatCurrency(parts.reduce((acc, p) => acc + ((p.current_price ?? p.price_at_time) * p.quantity), 0) + (selectedRequest.labor_charge || 0))}</span>
+                      <span className="font-bold">{formatCurrency(subtotal)}</span>
                     </div>
+                    {isCancelled && (
+                      <>
+                        <div className="flex justify-between text-[11px] text-rose-600 font-medium">
+                          <span>Cancellation Discount (50%)</span>
+                          <span>-{formatCurrency(cancellationDeduction)}</span>
+                        </div>
+                        {partsTotal > 0 && (
+                          <div className="flex justify-between text-[11px] text-rose-600 font-medium">
+                            <span>Waived Parts</span>
+                            <span>-{formatCurrency(waivedPartsDeduction)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
                     {selectedRequest.is_warranty === 1 && (
                       <div className="flex justify-between text-[11px]">
                         <span className="text-zinc-500">Warranty Deduction</span>
-                        <span className="font-bold text-rose-600">-{formatCurrency(parts.reduce((acc, p) => acc + ((p.current_price ?? p.price_at_time) * p.quantity), 0) + (selectedRequest.labor_charge || 0))}</span>
+                        <span className="font-bold text-rose-600">-{formatCurrency(isCancelled ? laborCharge * 0.5 : subtotal)}</span>
                       </div>
                     )}
                     {selectedRequest.down_payment > 0 && selectedRequest.is_warranty !== 1 && (
@@ -631,11 +785,7 @@ export default function BillingView({ user, globalSearch }: { user: User, global
                     <div className="pt-2 border-t-2 border-zinc-900 flex justify-between items-center">
                       <span className="text-sm font-black uppercase">Balance Due</span>
                       <span className="text-xl font-black text-blue-600">
-                        {formatCurrency(
-                          selectedRequest.is_warranty === 1 
-                            ? 0 
-                            : (parts.reduce((acc, p) => acc + ((p.current_price ?? p.price_at_time) * p.quantity), 0) + (selectedRequest.labor_charge || 0)) - (selectedRequest.down_payment || 0)
-                        )}
+                        {formatCurrency(balanceDue)}
                       </span>
                     </div>
                   </div>
