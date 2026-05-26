@@ -37,6 +37,12 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
   const [technicians, setTechnicians] = useState<User[]>([]);
   const [selectedTechnician, setSelectedTechnician] = useState<User | null>(null);
   const [viewingUnassigned, setViewingUnassigned] = useState(false);
+  const [queuePage, setQueuePage] = useState(1);
+
+  useEffect(() => {
+    setQueuePage(1);
+    setExpandedJob(null);
+  }, [selectedTechnician, viewingUnassigned, globalSearch]);
 
   const filteredJobs = useMemo(() => {
     let result = jobs;
@@ -89,6 +95,14 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
     }
     return [];
   }, [filteredJobs, user.role, selectedTechnician, viewingUnassigned]);
+
+  const queueItemsPerPage = 5;
+  const totalQueuePages = Math.ceil(jobsToDisplay.length / queueItemsPerPage);
+
+  const currentQueueJobs = useMemo(() => {
+    const startIndex = (queuePage - 1) * queueItemsPerPage;
+    return jobsToDisplay.slice(startIndex, startIndex + queueItemsPerPage);
+  }, [jobsToDisplay, queuePage, queueItemsPerPage]);
 
   const technicianStats = useMemo(() => {
     return technicians.map(tech => {
@@ -371,7 +385,7 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {visibleTechnicians.map(tech => (
                 <div 
                   key={tech.id}
@@ -441,7 +455,9 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
         /* STANDARD JOBS LIST VIEW FOR STANDARD TECHNICIAN OR EXPANDED ADMIN DRILLDOWN */
         <div className="space-y-4">
           {loading ? (
-            [1,2,3].map(i => <div key={i} className="h-24 bg-zinc-900 rounded-2xl animate-pulse"></div>)
+            <div className="space-y-4">
+              {[1,2,3].map(i => <div key={i} className="h-24 bg-zinc-900 rounded-2xl animate-pulse"></div>)}
+            </div>
           ) : jobsToDisplay.length === 0 ? (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
               <Wrench className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
@@ -455,22 +471,51 @@ export default function TechnicianView({ user, globalSearch }: { user: User, glo
                 }
               </p>
             </div>
-          ) : jobsToDisplay.map((job) => (
-            <JobCard 
-              key={job.id} 
-              job={job} 
-              user={user}
-              isExpanded={expandedJob === job.id}
-              onToggle={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
-              onStatusUpdate={(status: any, unassign: any, reason: any) => updateStatus(job.id, status, unassign, reason)}
-              onUpdateNotes={(notes: any) => updateNotes(job.id, notes)}
-              parts={parts}
-              onAddPart={(partId: any, quantity: any) => addPartToJob(job.id, partId, quantity)}
-              onRemovePart={removePartFromJob}
-              brands={brands}
-              onEdit={() => setEditingJob(job)}
-            />
-          ))}
+          ) : (
+            <div className="space-y-4">
+              {currentQueueJobs.map((job) => (
+                <JobCard 
+                  key={job.id} 
+                  job={job} 
+                  user={user}
+                  isExpanded={expandedJob === job.id}
+                  onToggle={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
+                  onStatusUpdate={(status: any, unassign: any, reason: any) => updateStatus(job.id, status, unassign, reason)}
+                  onUpdateNotes={(notes: any) => updateNotes(job.id, notes)}
+                  parts={parts}
+                  onAddPart={(partId: any, quantity: any) => addPartToJob(job.id, partId, quantity)}
+                  onRemovePart={removePartFromJob}
+                  brands={brands}
+                  onEdit={() => setEditingJob(job)}
+                />
+              ))}
+
+              {/* Pagination Controls */}
+              {totalQueuePages > 1 && (
+                <div className="mt-6 p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between no-print shadow-xl">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                    Page {queuePage} of {totalQueuePages}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => setQueuePage(prev => Math.max(1, prev - 1))}
+                      disabled={queuePage === 1}
+                      className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-white transition-colors"
+                    >
+                      Prev
+                    </button>
+                    <button 
+                      onClick={() => setQueuePage(prev => Math.min(totalQueuePages, prev + 1))}
+                      disabled={queuePage === totalQueuePages}
+                      className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-xs font-bold text-white transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

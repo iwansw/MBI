@@ -10,8 +10,10 @@ import {
   ExternalLink,
   Loader2,
   X,
-  XCircle
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import Logo from './Logo';
 import { User, ServiceRequest, Billing, ServicePart } from '../types';
 import { cn, formatCurrency, formatDateTime } from '../lib/utils';
@@ -32,6 +34,8 @@ export default function BillingView({ user, globalSearch }: { user: User, global
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [localSearch, setLocalSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const itemsPerPage = 8;
 
   const searchTerm = globalSearch || localSearch;
@@ -192,6 +196,7 @@ export default function BillingView({ user, globalSearch }: { user: User, global
   const cancelAndGenerateInvoice = async () => {
     if (!selectedRequest) return;
 
+    setIsCancelling(true);
     try {
       const result = await runTransaction(db, async (transaction) => {
         // Increment invoice counter for cancellation invoice
@@ -256,8 +261,11 @@ export default function BillingView({ user, globalSearch }: { user: User, global
       });
       
       toast.success(`Request cancelled & 50% labor charge invoice generated successfully`);
+      setShowCancelConfirm(false);
     } catch (err: any) {
       handleFirestoreError(err, OperationType.CREATE, `billing/${selectedRequest.id}`);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -571,7 +579,7 @@ export default function BillingView({ user, globalSearch }: { user: User, global
               <div className="flex items-center gap-3 no-print">
                 {selectedRequest.status === 'APPR-WAIT' && (
                   <button 
-                    onClick={cancelAndGenerateInvoice}
+                    onClick={() => setShowCancelConfirm(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-rose-600/20"
                   >
                     <XCircle className="w-4 h-4" />
@@ -840,6 +848,99 @@ export default function BillingView({ user, globalSearch }: { user: User, global
           </div>
         )}
       </div>
+
+      {/* Cancellation Confirmation Modal */}
+      <AnimatePresence>
+        {showCancelConfirm && selectedRequest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-rose-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Cancel Request?</h2>
+                    <p className="text-zinc-500 text-xs">Confirm cancellation details</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowCancelConfirm(false)} 
+                  disabled={isCancelling} 
+                  className="p-2 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                  id="close-cancel-confirm-modal"
+                >
+                  <X className="w-5 h-5 text-zinc-500" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                  Are you sure you want to cancel the service request for <strong className="text-white">{selectedRequest.customer_name}</strong>? This action is irreversible.
+                </p>
+
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-500">Service Unit</span>
+                    <span className="text-white font-medium">{selectedRequest.brand_name} {selectedRequest.model}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-500">Original Labor Charge</span>
+                    <span className="text-white font-medium">{formatCurrency(selectedRequest.labor_charge || 0)}</span>
+                  </div>
+                  <div className="border-t border-zinc-800 my-2 pt-2 flex justify-between text-xs font-bold">
+                    <span className="text-rose-500">50% Cancellation Fee</span>
+                    <span className="text-rose-500">{formatCurrency((selectedRequest.labor_charge || 0) * 0.5)}</span>
+                  </div>
+                </div>
+
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 flex gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-rose-400 leading-normal">
+                    Cancelling will automatically waive all replaced parts charges and generate a labor-only cancellation invoice.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 bg-zinc-900/50 border-t border-zinc-800 flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={isCancelling}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-bold rounded-xl text-white transition-all"
+                  id="confirm-modal-keep-request"
+                >
+                  Keep Request
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelAndGenerateInvoice}
+                  disabled={isCancelling}
+                  className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 rounded-xl text-xs font-bold text-white transition-all shadow-lg shadow-rose-600/20"
+                  id="confirm-modal-cancel-request"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-3.5 h-3.5" />
+                      Yes, Cancel Request
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
